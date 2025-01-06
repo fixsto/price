@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Артур СТО</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="container">
+        <aside class="sidebar">
+            <h2>Категории услуг</h2>
+            <ul class="menu" id="categories-menu">
+                <li class="menu-item active">Выбранные услуги</li>
+                <!-- Categories will be loaded from CSV -->
+            </ul>
+        </aside>
+        <main class="main-content">
+            <div class="top-bar">
+                <div class="search-bar">
+                    <input type="text" id="searchInput" placeholder="Поиск услуг...">
+                    <div class="search-icon">🔍</div>
+                </div>
+                <div class="calculator">
+                    <div class="calc-header">
+                        <h3>Калькулятор услуг</h3>
+                        <div class="total">
+                            Итого: <span id="totalPrice">0</span> ₴
+                        </div>
+                    </div>
+                    <div id="selectedCount">Выбрано услуг: <span>0</span></div>
+                </div>
+            </div>
+            
+            <div class="service-list-container">
+                <ul class="service-list" data-category="selected" style="display: block;">
+                    <h3>Выбранные услуги</h3>
+                    <!-- Selected services will appear here -->
+                </ul>
+                <!-- Service lists will be loaded from CSV -->
+            </div>
+        </main>
+    </div>
+    <script>
+        // Функция для загрузки данных из CSV
+        async function loadServicesFromCSV() {
+            try {
+                const response = await fetch('services.csv');
+                const data = await response.text();
+                const rows = data.split('\n');
+                const headers = rows[0].split(',');
+                const services = [];
+                const categories = new Set();
+
+                // Парсим CSV данные
+                for (let i = 1; i < rows.length; i++) {
+                    if (rows[i].trim() === '') continue;
+                    const values = rows[i].split(',');
+                    const service = {
+                        category: values[0],
+                        name: values[1],
+                        price: parseInt(values[2])
+                    };
+                    services.push(service);
+                    categories.add(service.category);
+                }
+
+                // Создаем меню категорий
+                const categoriesMenu = document.getElementById('categories-menu');
+                const firstMenuItem = categoriesMenu.firstElementChild; // Сохраняем "Выбранные услуги"
+                categoriesMenu.innerHTML = ''; // Очищаем меню
+                categoriesMenu.appendChild(firstMenuItem); // Возвращаем "Выбранные услуги"
+
+                categories.forEach(category => {
+                    const li = document.createElement('li');
+                    li.className = 'menu-item';
+                    li.textContent = category;
+                    categoriesMenu.appendChild(li);
+                });
+
+                // Создаем списки услуг
+                const container = document.querySelector('.service-list-container');
+                const selectedList = container.firstElementChild; // Сохраняем список выбранных
+                container.innerHTML = ''; // Очищаем контейнер
+                container.appendChild(selectedList); // Возвращаем список выбранных
+
+                categories.forEach(category => {
+                    const ul = document.createElement('ul');
+                    ul.className = 'service-list';
+                    ul.setAttribute('data-category', category.toLowerCase().replace(/\s+/g, '-'));
+                    
+                    const h3 = document.createElement('h3');
+                    h3.textContent = category;
+                    ul.appendChild(h3);
+
+                    // Добавляем услуги для данной категории
+                    services.filter(service => service.category === category)
+                            .forEach(service => {
+                                const li = document.createElement('li');
+                                li.className = 'service-item';
+                                li.innerHTML = `
+                                    <label>
+                                        <input type="checkbox">
+                                        ${service.name}
+                                        <span class="price">~ ${service.price} ₴</span>
+                                    </label>
+                                `;
+                                ul.appendChild(li);
+                            });
+
+                    container.appendChild(ul);
+                });
+
+                // Инициализируем обработчики событий
+                initializeEventHandlers();
+            } catch (error) {
+                console.error('Ошибка при загрузке данных:', error);
+            }
+        }
+
+        // Функция для инициализации обработчиков событий
+        function initializeEventHandlers() {
+            const menuItems = document.querySelectorAll('.menu-item');
+            const serviceLists = document.querySelectorAll('.service-list');
+            const totalPriceElement = document.getElementById('totalPrice');
+            const selectedCountElement = document.getElementById('selectedCount').querySelector('span');
+
+            // Функция для показа выбранного списка услуг
+            function showServiceList(category) {
+                serviceLists.forEach(list => {
+                    if (list.getAttribute('data-category') !== 'selected') {
+                        list.style.display = 'none';
+                    }
+                });
+
+                const selectedList = document.querySelector(`.service-list[data-category="${category}"]`);
+                if (selectedList && category !== 'selected') {
+                    selectedList.style.display = 'block';
+                }
+            }
+
+            // Функция для обновления калькулятора
+            function updateCalculator() {
+                const selectedList = document.querySelector('.service-list[data-category="selected"]');
+                const selectedItems = selectedList.querySelectorAll('.service-item');
+                
+                const totalPrice = Array.from(selectedItems).reduce((sum, item) => {
+                    const priceText = item.querySelector('.price').textContent;
+                    return sum + parseInt(priceText.replace(/[^0-9]/g, ''));
+                }, 0);
+
+                totalPriceElement.textContent = totalPrice.toLocaleString();
+                selectedCountElement.textContent = selectedItems.length;
+            }
+
+            // Обработчики событий для меню
+            menuItems.forEach((item, index) => {
+                item.addEventListener('click', () => {
+                    menuItems.forEach(el => el.classList.remove('active'));
+                    item.classList.add('active');
+                    const category = index === 0 ? 'selected' : 
+                        item.textContent.toLowerCase().replace(/\s+/g, '-');
+                    showServiceList(category);
+                });
+            });
+
+            // Обработчик для поиска
+            const searchInput = document.getElementById('searchInput');
+            searchInput.addEventListener('input', (e) => {
+                const searchText = e.target.value.toLowerCase().trim();
+                
+                if (searchText === '') {
+                    const activeCategory = document.querySelector('.menu-item.active');
+                    if (activeCategory) {
+                        activeCategory.click();
+                    }
+                    return;
+                }
+
+                serviceLists.forEach(list => {
+                    if (list.getAttribute('data-category') !== 'selected') {
+                        const items = list.querySelectorAll('.service-item');
+                        let hasVisibleItems = false;
+
+                        items.forEach(item => {
+                            const text = item.textContent.toLowerCase();
+                            const isVisible = text.includes(searchText);
+                            item.style.display = isVisible ? 'flex' : 'none';
+                            if (isVisible) hasVisibleItems = true;
+                        });
+
+                        list.style.display = hasVisibleItems ? 'block' : 'none';
+                    }
+                });
+            });
+
+            // Обработчик для чекбоксов
+            document.addEventListener('change', (e) => {
+                if (e.target.type === 'checkbox') {
+                    const selectedList = document.querySelector('.service-list[data-category="selected"]');
+                    const serviceItem = e.target.closest('.service-item');
+                    const itemText = serviceItem.querySelector('label').textContent.trim();
+                    
+                    // Синхронизируем все чекбоксы
+                    document.querySelectorAll('.service-item input[type="checkbox"]').forEach(checkbox => {
+                        const checkboxText = checkbox.closest('label').textContent.trim();
+                        if (checkboxText === itemText) {
+                            checkbox.checked = e.target.checked;
+                        }
+                    });
+                    
+                    if (e.target.checked) {
+                        const existingItem = Array.from(selectedList.querySelectorAll('.service-item'))
+                            .find(item => item.querySelector('label').textContent.trim() === itemText);
+                        
+                        if (!existingItem) {
+                            const clonedItem = serviceItem.cloneNode(true);
+                            clonedItem.querySelector('input[type="checkbox"]').checked = true;
+                            selectedList.appendChild(clonedItem);
+                        }
+                    } else {
+                        const itemInSelected = Array.from(selectedList.querySelectorAll('.service-item'))
+                            .find(item => item.querySelector('label').textContent.trim() === itemText);
+                        
+                        if (itemInSelected) {
+                            itemInSelected.remove();
+                        }
+                    }
+
+                    updateCalculator();
+                }
+            });
+
+            // Инициализация калькулятора
+            updateCalculator();
+        }
+
+        // Загружаем данные при загрузке страницы
+        document.addEventListener('DOMContentLoaded', loadServicesFromCSV);
+    </script>
+</body>
+
+</html>
